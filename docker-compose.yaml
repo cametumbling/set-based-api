@@ -1,0 +1,23 @@
+services:
+  db:
+    image: nzsne8pttnh8wrpu/p2ckp9ddret2arc2
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - 5432:5432
+  application:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - PGHOST=db
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=supersecretpassword
+      - PGDATABASE=sumble_data
+    ports:
+      - 8000:8000
