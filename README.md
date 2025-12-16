@@ -2,28 +2,36 @@
 
 ## Overview
 
-API that accepts advanced queries with AND/OR/NOT logic to search job posts by technology, organization, and job function.
+API that accepts advanced queries with AND / OR / NOT logic to search job posts by technology, organization, and job function.
+
+The API is designed to handle complex boolean queries efficiently on large datasets.
 
 ## Design Decisions
 
 ### Query Structure
 
-Chose a nested JSON structure for queries rather than parsing a string. This is faster to implement and less error-prone.
+Chose a nested JSON structure for queries rather than parsing a query string. This avoids writing a custom parser, keeps the API explicit, and maps cleanly to boolean logic.
 
 ### SQL Approach
 
--   **CTEs (Common Table Expressions)**: Pre-filter tech/org/job_function IDs once, rather than running ILIKE per row. If a CTE returns zero rows, the query short-circuits fast.
--   **Parameterized queries**: Prevent SQL injection by using %s placeholders with psycopg2. Params are built alongside SQL in each function to guarantee correct ordering.
--   **EXISTS subqueries**: Avoid row multiplication from many-to-many joins.
--   **DISTINCT**: Prevent duplicate results from joins.
--   **Slug OR name matching**: Searches match against both slug and name fields for flexibility (e.g., ".net" matches "C .NET" by name or "c-net" by slug).
--   **Deterministic ordering**: Results ordered by job ID for consistent pagination.
+-   **Set-based boolean logic**: Each filter produces a set of `job_post_id`s. Boolean operators are implemented using SQL set operations:
+    -   AND → `INTERSECT`
+    -   OR → `UNION`
+    -   NOT → `EXCEPT`
+-   **CTEs (Common Table Expressions)**: Each leaf filter (tech / organization / job_function) is evaluated once in its own CTE, producing a set of `job_post_id`s.
+-   **Deferred joins**: Job details and organization metadata are joined _after_ the final `job_post_id` set is computed. This avoids wide scans and expensive row-wise `EXISTS` checks for OR-heavy queries.
+-   **Parameterized queries**: All inputs are passed via `%s` placeholders using psycopg2 to prevent SQL injection.
+-   **Slug OR name matching**: Filters match against both `slug` and `name` fields for flexibility (e.g. `.net` matches `C .NET` by name or `c-net` by slug).
+-   **Deterministic ordering**: Results are ordered by job ID and limited to 10.
 
-### Performance
+## Performance Characteristics
 
--   ILIKE runs once per filter in CTEs, not per job row
--   EXISTS short-circuits once a match is found
--   Result set limited to 10 for responsiveness
+-   Boolean logic is executed via SQL set algebra (`UNION / INTERSECT / EXCEPT`)
+-   Each filter runs once, independent of dataset size
+-   Avoids row-wise predicate evaluation on large tables
+-   Result set is limited to 10 for responsiveness
+
+This approach ensures predictable performance even for broad OR / NOT queries.
 
 ## Running
 
