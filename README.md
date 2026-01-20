@@ -1,4 +1,4 @@
-# Sumble Advanced Query API
+# Set-based Advanced Query API
 
 ## Overview
 
